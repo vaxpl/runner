@@ -26,11 +26,11 @@ NAME=$(basename ${FILE})
 SIZE=$(stat -c %s ${FILE})
 
 shift
-echo "$*"
+ARGS=$*
 
 (echo "SECRET:${RUNNER_SECRET}"; \
 echo "FILE:${NAME}|${SIZE}"; \
-cat ${FILE}; echo "EXEC:cmd /c ${NAME}"; \
+cat ${FILE}; echo "EXEC:cmd /c ${NAME} ${ARGS}"; \
 echo "REMOVE:${NAME}"; \
 echo "EXIT!"
 ) | nc ${RUNNER_HOST} ${RUNNER_PORT}
