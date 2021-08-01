@@ -21,8 +21,8 @@ const APP_ENVIRONMENTS: &str = r#"ENVIRONMENT:
 "#;
 
 macro_rules! other_err {
-    ($expr:expr) => {
-        io::Error::new(io::ErrorKind::Other, $expr)
+    ($($arg:tt)*) => {
+        io::Error::new(io::ErrorKind::Other, format!($($arg)*))
     };
 }
 
@@ -68,7 +68,7 @@ async fn handshake(cfg: &Config, reader: &mut BufReader<TcpStream>) -> io::Resul
     let len = reader.read_until(b'\n', &mut buffer).await?;
     let line = std::str::from_utf8(&buffer[0..len])
         .map(|s| s.trim())
-        .map_err(|e| other_err!(format!("{}", e)))?;
+        .map_err(|e| other_err!("{}", e))?;
 
     debug!("{}", line);
 
@@ -77,13 +77,10 @@ async fn handshake(cfg: &Config, reader: &mut BufReader<TcpStream>) -> io::Resul
         if token == cfg.token {
             Ok(())
         } else {
-            Err(other_err!(format!(
-                "The access token {} does not matched!",
-                token
-            )))
+            Err(other_err!("The access token {} does not matched!", token))
         }
     } else {
-        Err(other_err!(format!("Please provide the `TOKEN` first!")))
+        Err(other_err!("Please provide the `TOKEN` first!"))
     }
 }
 
@@ -127,15 +124,15 @@ async fn process(cfg: &Config, stream: TcpStream) -> io::Result<()> {
             let tasks = FuturesUnordered::new();
             let writer1 = writer.clone();
             let writer2 = writer.clone();
-            if let Some(stderr) = child.stderr {
-                tasks.push(task::spawn(io::copy(stderr, writer1)));
-            }
             if let Some(stdout) = child.stdout {
-                tasks.push(task::spawn(io::copy(stdout, writer2)));
+                tasks.push(task::spawn(io::copy(stdout, writer1)));
+            }
+            if let Some(stderr) = child.stderr {
+                tasks.push(task::spawn(io::copy(stderr, writer2)));
             }
             for t in tasks {
                 if let Err(err) = t.await {
-                    warn!("Client Error {:?}", err);
+                    warn!("Client error: {:?}", err);
                 }
             }
         } else if line.starts_with("EXIT!") {
@@ -166,17 +163,14 @@ async fn process(cfg: &Config, stream: TcpStream) -> io::Result<()> {
         }
     }
 
-    println!("Finished");
-
     Ok(())
 }
 
 fn run(cfg: Config, args: Vec<String>) -> io::Result<()> {
-    debug!("runnnnnnnnnnnnnnnnnnn");
     task::block_on(async move {
         // Connect to runner server
         let stream = TcpStream::connect((cfg.address.as_str(), cfg.port)).await?;
-        let mut reader = stream.clone();
+        let reader = stream.clone();
         let mut writer = stream.clone();
 
         let t1 = task::spawn(io::copy(reader, io::stdout()));
@@ -214,8 +208,9 @@ fn run(cfg: Config, args: Vec<String>) -> io::Result<()> {
             Ok(())
         });
 
-        t1.await.unwrap();
-        t2.await.unwrap();
+        let _ = t1.await;
+        let _ = t2.await;
+
         Ok(())
     })
 }
@@ -335,7 +330,7 @@ fn main() -> io::Result<()> {
         .map(str::to_owned)
         .or(env::var("RUNNER_PORT").ok())
     {
-        cfg.port = v.parse::<u16>().map_err(|e| other_err!(format!("{}", e)))?;
+        cfg.port = v.parse::<u16>().map_err(|e| other_err!("{}", e))?;
     }
     if let Some(v) = matches
         .value_of("token")
@@ -354,8 +349,8 @@ fn main() -> io::Result<()> {
                 .collect();
             run(cfg, args)?;
         }
-        ("server", Some(sub_matches)) => {
-             server(cfg)?;
+        ("server", Some(_sub_matches)) => {
+            server(cfg)?;
         }
         (u, v) => {
             debug!("u={:?}, v={:?}", u, v);
